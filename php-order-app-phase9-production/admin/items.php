@@ -11,6 +11,7 @@ require_same_tenant_or_die($tenant['id']);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf_or_die();
     if (!enforce_plan_limit($pdo, (int)$tenant['id'], 'items') && post('action') === 'create') {
         $error = 'Item plan limit reached.';
     } else {
@@ -34,7 +35,7 @@ $items = $stmt->fetchAll();
 <body><div class="container">
 <div class="topbar"><h1>Items · <?= h($tenant['name']) ?></h1><div class="nav"><a href="/admin/index.php?store=<?= urlencode($tenant['subdomain']) ?>">Dashboard</a><a href="/logout.php">Logout</a></div></div>
 <?php if ($error): ?><div class="card"><span class="badge danger"><?= h($error) ?></span></div><?php endif; ?>
-<div class="card"><h2>Create item</h2><form method="post" class="grid"><input type="hidden" name="action" value="create"><div><label class="small">Name</label><input name="name" required></div><div><label class="small">Price</label><input type="number" name="price" required></div><div><label class="small">SKU</label><input name="sku"></div><div><label class="small">Stock</label><input type="number" name="stock" value="0"></div><div><button type="submit">Create Item</button></div></form></div>
+<div class="card"><h2>Create item</h2><form method="post" class="grid"><?= csrf_field() ?><input type="hidden" name="action" value="create"><div><label class="small">Name</label><input name="name" required></div><div><label class="small">Price</label><input type="number" name="price" required></div><div><label class="small">SKU</label><input name="sku"></div><div><label class="small">Stock</label><input type="number" name="stock" value="0"></div><div><button type="submit">Create Item</button></div></form></div>
 <div class="card"><h2>Current items</h2><table><thead><tr><th>Name</th><th>Price</th><th>SKU</th><th>Stock</th><th></th></tr></thead><tbody>
-<?php foreach ($items as $item): ?><tr><td><?= h($item['name']) ?></td><td><?= (int)$item['price'] ?></td><td><?= h($item['sku']) ?></td><td><?= (int)$item['stock'] ?></td><td><form method="post" onsubmit="return confirm('Delete item?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="danger" type="submit">Delete</button></form></td></tr><?php endforeach; ?>
+<?php foreach ($items as $item): ?><tr><td><?= h($item['name']) ?></td><td><?= (int)$item['price'] ?></td><td><?= h($item['sku']) ?></td><td><?= (int)$item['stock'] ?></td><td><form method="post" onsubmit="return confirm('Delete item?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="danger" type="submit">Delete</button></form></td></tr><?php endforeach; ?>
 </tbody></table></div></div></body></html>
