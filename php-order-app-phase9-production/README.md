@@ -12,6 +12,10 @@ Included:
 - payment webhook stubs
 - event logging
 - shared-host-friendly structure
+- tenant onboarding flow (`/signup.php`)
+- tenant settings (`/admin/settings.php?store=<tenant>`)
+- tenant user management (`/admin/users.php?store=<tenant>`)
+- tenant analytics (`/admin/analytics.php?store=<tenant>`)
 
 Demo login after importing the SQL:
 - store: demo
