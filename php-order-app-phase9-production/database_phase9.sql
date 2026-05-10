@@ -113,6 +113,29 @@ CREATE TABLE event_logs (
   INDEX idx_event_logs_tenant_event (tenant_id, event_name)
 );
 
+CREATE TABLE audit_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tenant_id INT DEFAULT NULL,
+  user_id INT DEFAULT NULL,
+  action VARCHAR(120) NOT NULL,
+  meta_json JSON DEFAULT NULL,
+  ip_address VARCHAR(64) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_audit_logs_tenant_action (tenant_id, action),
+  INDEX idx_audit_logs_user (user_id)
+);
+
+CREATE TABLE rate_limits (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  scope VARCHAR(100) NOT NULL,
+  identifier VARCHAR(255) NOT NULL,
+  attempts INT NOT NULL DEFAULT 1,
+  window_started_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  UNIQUE KEY uniq_rate_limit_scope_identifier (scope, identifier),
+  INDEX idx_rate_limit_updated (updated_at)
+);
+
 INSERT INTO tenants (name, subdomain, plan_code, status) VALUES
 ('Demo Store', 'demo', 'free', 'active');
 

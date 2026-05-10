@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/helpers.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/security.php';
+start_secure_session();
 
 function require_login() {
     if (empty($_SESSION['user_id'])) redirect_to('/login.php');

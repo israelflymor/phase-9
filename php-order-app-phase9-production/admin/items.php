@@ -4,6 +4,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/tenant.php';
 require_once __DIR__ . '/../includes/events.php';
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 require_admin();
 $tenant = require_tenant($pdo);
@@ -11,19 +13,32 @@ require_same_tenant_or_die($tenant['id']);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf_or_die();
+    rate_limit_or_die($pdo, 'admin_items', (string)($_SESSION['user_id'] ?? 0), 80, 60);
     if (!enforce_plan_limit($pdo, (int)$tenant['id'], 'items') && post('action') === 'create') {
         $error = 'Item plan limit reached.';
     } else {
         if (post('action') === 'create') {
+            $name = substr(post('name'), 0, 100);
+            $price = max(0, (int)post('price'));
+            $sku = substr(post('sku'), 0, 100);
+            $stock = max(0, (int)post('stock'));
+            if ($name === '') {
+                $error = 'Item name is required.';
+            } else {
             $stmt = $pdo->prepare('INSERT INTO items (tenant_id, name, price, sku, stock) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([(int)$tenant['id'], post('name'), (int)post('price'), post('sku'), (int)post('stock')]);
-            emit_event($pdo, (int)$tenant['id'], 'item.created', ['name'=>post('name')]);
+            $stmt->execute([(int)$tenant['id'], $name, $price, $sku, $stock]);
+            audit_log($pdo, (int)$tenant['id'], (int)($_SESSION['user_id'] ?? 0), 'item.created', ['name' => $name]);
+            emit_event($pdo, (int)$tenant['id'], 'item.created', ['name'=>$name]);
+            }
         } elseif (post('action') === 'delete') {
+            $itemId = (int)post('id');
             $stmt = $pdo->prepare('DELETE FROM items WHERE id = ? AND tenant_id = ?');
-            $stmt->execute([(int)post('id'), (int)$tenant['id']]);
-            emit_event($pdo, (int)$tenant['id'], 'item.deleted', ['id'=>(int)post('id')]);
+            $stmt->execute([$itemId, (int)$tenant['id']]);
+            audit_log($pdo, (int)$tenant['id'], (int)($_SESSION['user_id'] ?? 0), 'item.deleted', ['id' => $itemId]);
+            emit_event($pdo, (int)$tenant['id'], 'item.deleted', ['id'=>$itemId]);
         }
-        redirect_to('/admin/items.php?store=' . urlencode($tenant['subdomain']));
+        if (!$error) redirect_to('/admin/items.php?store=' . urlencode($tenant['subdomain']));
     }
 }
 $stmt = $pdo->prepare('SELECT * FROM items WHERE tenant_id = ? ORDER BY id DESC');
@@ -34,7 +49,7 @@ $items = $stmt->fetchAll();
 <body><div class="container">
 <div class="topbar"><h1>Items · <?= h($tenant['name']) ?></h1><div class="nav"><a href="/admin/index.php?store=<?= urlencode($tenant['subdomain']) ?>">Dashboard</a><a href="/logout.php">Logout</a></div></div>
 <?php if ($error): ?><div class="card"><span class="badge danger"><?= h($error) ?></span></div><?php endif; ?>
-<div class="card"><h2>Create item</h2><form method="post" class="grid"><input type="hidden" name="action" value="create"><div><label class="small">Name</label><input name="name" required></div><div><label class="small">Price</label><input type="number" name="price" required></div><div><label class="small">SKU</label><input name="sku"></div><div><label class="small">Stock</label><input type="number" name="stock" value="0"></div><div><button type="submit">Create Item</button></div></form></div>
+<div class="card"><h2>Create item</h2><form method="post" class="grid"><?= csrf_field() ?><input type="hidden" name="action" value="create"><div><label class="small">Name</label><input name="name" maxlength="100" required></div><div><label class="small">Price</label><input type="number" min="0" name="price" required></div><div><label class="small">SKU</label><input name="sku" maxlength="100"></div><div><label class="small">Stock</label><input type="number" min="0" name="stock" value="0"></div><div><button type="submit">Create Item</button></div></form></div>
 <div class="card"><h2>Current items</h2><table><thead><tr><th>Name</th><th>Price</th><th>SKU</th><th>Stock</th><th></th></tr></thead><tbody>
-<?php foreach ($items as $item): ?><tr><td><?= h($item['name']) ?></td><td><?= (int)$item['price'] ?></td><td><?= h($item['sku']) ?></td><td><?= (int)$item['stock'] ?></td><td><form method="post" onsubmit="return confirm('Delete item?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="danger" type="submit">Delete</button></form></td></tr><?php endforeach; ?>
+<?php foreach ($items as $item): ?><tr><td><?= h($item['name']) ?></td><td><?= (int)$item['price'] ?></td><td><?= h($item['sku']) ?></td><td><?= (int)$item['stock'] ?></td><td><form method="post" onsubmit="return confirm('Delete item?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="danger" type="submit">Delete</button></form></td></tr><?php endforeach; ?>
 </tbody></table></div></div></body></html>

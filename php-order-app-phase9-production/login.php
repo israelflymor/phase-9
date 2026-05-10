@@ -2,12 +2,16 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/tenant.php';
-session_start();
+require_once __DIR__ . '/includes/security.php';
+require_once __DIR__ . '/includes/audit.php';
+start_secure_session();
 
 $error = '';
 $tenant = resolve_tenant($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf_or_die();
+    rate_limit_or_die($pdo, 'login', get_client_ip(), 10, 300);
     $store = post('store');
     $email = post('email');
     $password = post('password');
@@ -17,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tenant = $stmt->fetch();
 
     if (!$tenant || $tenant['status'] !== 'active') {
+        audit_log($pdo, null, null, 'auth.login_failed', ['store' => $store, 'email' => $email, 'reason' => 'invalid_store']);
         $error = 'Invalid or inactive store.';
     } else {
         $stmt = $pdo->prepare('SELECT * FROM users WHERE tenant_id = ? AND email = ? AND status = "active" LIMIT 1');
@@ -24,17 +29,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
+            session_regenerate_id(true);
             $_SESSION['user_id'] = (int)$user['id'];
             $_SESSION['tenant_id'] = (int)$tenant['id'];
             $_SESSION['tenant_subdomain'] = $tenant['subdomain'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['username'] = $user['username'];
+            audit_log($pdo, (int)$tenant['id'], (int)$user['id'], 'auth.login_success', ['role' => $user['role']]);
 
             if ($user['role'] === 'client') {
                 redirect_to('/tenant/storefront.php?store=' . urlencode($tenant['subdomain']));
             }
             redirect_to('/admin/index.php?store=' . urlencode($tenant['subdomain']));
         } else {
+            audit_log($pdo, (int)$tenant['id'], null, 'auth.login_failed', ['store' => $store, 'email' => $email, 'reason' => 'invalid_credentials']);
             $error = 'Login failed.';
         }
     }
@@ -46,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <p class="small">Demo tenant: <strong>demo</strong> · email <strong>owner@demo.local</strong> · password <strong>secret123</strong></p>
 <?php if ($error): ?><p class="badge danger"><?= h($error) ?></p><?php endif; ?>
 <form method="post">
+<?= csrf_field() ?>
 <label class="small">Store / Tenant</label><input name="store" value="<?= h($tenant['subdomain'] ?? getv('store', 'demo')) ?>" required>
 <label class="small">Email</label><input type="email" name="email" required>
 <label class="small">Password</label><input type="password" name="password" required>
