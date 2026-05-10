@@ -4,15 +4,27 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/tenant.php';
 require_once __DIR__ . '/../includes/events.php';
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 require_admin();
 $tenant = require_tenant($pdo);
 require_same_tenant_or_die($tenant['id']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'], $_POST['new_status'])) {
+    verify_csrf_or_die();
+    rate_limit_or_die($pdo, 'admin_order_update', (string)($_SESSION['user_id'] ?? 0), 60, 60);
+    $newStatus = post('new_status');
+    $allowedStatuses = ['pending','packing','shipped','delivered','cancelled'];
+    if (!in_array($newStatus, $allowedStatuses, true)) {
+        http_response_code(422);
+        exit('Invalid status');
+    }
+    $orderId = (int)post('order_id');
     $stmt = $pdo->prepare('UPDATE orders SET status = ? WHERE id = ? AND tenant_id = ?');
-    $stmt->execute([post('new_status'), (int)post('order_id'), (int)$tenant['id']]);
-    emit_event($pdo, (int)$tenant['id'], 'order.status_changed', ['order_id'=>(int)post('order_id'),'status'=>post('new_status')]);
+    $stmt->execute([$newStatus, $orderId, (int)$tenant['id']]);
+    audit_log($pdo, (int)$tenant['id'], (int)($_SESSION['user_id'] ?? 0), 'order.status_changed', ['order_id' => $orderId, 'status' => $newStatus]);
+    emit_event($pdo, (int)$tenant['id'], 'order.status_changed', ['order_id'=>$orderId,'status'=>$newStatus]);
     redirect_to('/admin/index.php?store=' . urlencode($tenant['subdomain']));
 }
 $plan = tenant_plan($pdo, (int)$tenant['id']);
@@ -31,6 +43,6 @@ $orders = $stmt->fetchAll();
 <td><?php $list = json_decode($order['items'], true) ?: []; foreach ($list as $line): ?><div class="small"><?= h($line['name']) ?> × <?= (int)$line['qty'] ?></div><?php endforeach; ?></td>
 <td><div><?= h($order['payment_method']) ?></div><div class="small"><?= h($order['payment_status']) ?></div></td>
 <td><span class="badge"><?= h($order['status']) ?></span></td>
-<td><form method="post" class="row"><input type="hidden" name="order_id" value="<?= (int)$order['id'] ?>"><select name="new_status" style="min-width:140px"><?php foreach (['pending','packing','shipped','delivered','cancelled'] as $status): ?><option value="<?= h($status) ?>" <?= $order['status'] === $status ? 'selected' : '' ?>><?= h($status) ?></option><?php endforeach; ?></select><button type="submit">Update</button></form></td>
+<td><form method="post" class="row"><?= csrf_field() ?><input type="hidden" name="order_id" value="<?= (int)$order['id'] ?>"><select name="new_status" style="min-width:140px"><?php foreach (['pending','packing','shipped','delivered','cancelled'] as $status): ?><option value="<?= h($status) ?>" <?= $order['status'] === $status ? 'selected' : '' ?>><?= h($status) ?></option><?php endforeach; ?></select><button type="submit">Update</button></form></td>
 </tr><?php endforeach; ?>
 </tbody></table></div></div></body></html>

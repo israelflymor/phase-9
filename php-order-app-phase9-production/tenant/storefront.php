@@ -3,7 +3,9 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/tenant.php';
 require_once __DIR__ . '/../includes/events.php';
-session_start();
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/audit.php';
+start_secure_session();
 
 $tenant = require_tenant($pdo);
 $tenantId = (int)$tenant['id'];
@@ -14,16 +16,22 @@ $stmt->execute([$tenantId]);
 $items = $stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf_or_die();
+    rate_limit_or_die($pdo, 'storefront_orders', get_client_ip() . ':' . $tenantId, 20, 60);
     if (!enforce_plan_limit($pdo, $tenantId, 'orders')) {
         $error = 'Plan order limit reached.';
     } else {
-        $clientName = post('client_name');
-        $clientEmail = post('client_email');
+        $clientName = substr(post('client_name'), 0, 100);
+        $clientEmailRaw = post('client_email');
+        $clientEmail = $clientEmailRaw ? (filter_var($clientEmailRaw, FILTER_VALIDATE_EMAIL) ? $clientEmailRaw : '') : '';
         $paymentMethod = post('payment_method', 'pay_on_delivery');
+        if (!in_array($paymentMethod, ['pay_on_delivery', 'stripe', 'paystack'], true)) {
+            $paymentMethod = 'pay_on_delivery';
+        }
         $orderItems = [];
         foreach ($items as $item) {
             $qty = (int)($_POST['qty_' . $item['id']] ?? 0);
-            if ($qty > 0) {
+            if ($qty > 0 && $qty <= 1000) {
                 $orderItems[] = ['id'=>(int)$item['id'],'name'=>$item['name'],'price'=>(int)$item['price'],'qty'=>$qty];
             }
         }
@@ -33,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare('INSERT INTO orders (tenant_id, client_name, client_email, items, payment_method) VALUES (?, ?, ?, ?, ?)');
             $stmt->execute([$tenantId, $clientName, $clientEmail ?: null, json_encode($orderItems), $paymentMethod]);
             $orderId = (int)$pdo->lastInsertId();
+            audit_log($pdo, $tenantId, null, 'order.created_storefront', ['order_id' => $orderId, 'payment_method' => $paymentMethod]);
             emit_event($pdo, $tenantId, 'order.created', ['order_id'=>$orderId,'client_name'=>$clientName]);
             $msg = 'Order created successfully. Order #' . $orderId;
         }
@@ -44,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="topbar"><div><h1><?= h($tenant['name']) ?></h1><div class="small">Store: <?= h($tenant['subdomain']) ?> · Plan: <?= h($tenant['plan_code']) ?></div></div><div class="nav"><a href="/login.php?store=<?= urlencode($tenant['subdomain']) ?>">Admin login</a></div></div>
 <?php if ($msg): ?><div class="card"><span class="badge ok"><?= h($msg) ?></span></div><?php endif; ?>
 <?php if ($error): ?><div class="card"><span class="badge danger"><?= h($error) ?></span></div><?php endif; ?>
-<div class="card"><h2>Place order</h2><form method="post">
+<div class="card"><h2>Place order</h2><form method="post"><?= csrf_field() ?>
 <div class="grid"><div><label class="small">Your Name</label><input name="client_name" required></div><div><label class="small">Your Email</label><input type="email" name="client_email"></div></div>
 <div class="row" style="margin-top:12px;margin-bottom:12px">
 <label><input type="radio" name="payment_method" value="pay_on_delivery" checked> Pay on Delivery</label>
