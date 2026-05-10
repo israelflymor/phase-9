@@ -49,5 +49,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <label class="small">Store / Tenant</label><input name="store" value="<?= h($tenant['subdomain'] ?? getv('store', 'demo')) ?>" required>
 <label class="small">Email</label><input type="email" name="email" required>
 <label class="small">Password</label><input type="password" name="password" required>
-<div class="row" style="margin-top:12px"><button type="submit">Login</button><a href="/tenant/storefront.php?store=demo">Open Demo Storefront</a></div>
+<div class="row" style="margin-top:12px"><button type="submit">Login</button><a href="/signup.php">Create Tenant</a><a href="/tenant/storefront.php?store=demo">Open Demo Storefront</a></div>
 </form></div></div></body></html>
