@@ -2,12 +2,14 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/tenant.php';
+require_once __DIR__ . '/includes/csrf.php';
 session_start();
 
 $error = '';
 $tenant = resolve_tenant($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_csrf();
     $store = post('store');
     $email = post('email');
     $password = post('password');
@@ -24,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
+            session_regenerate_id(true);
             $_SESSION['user_id'] = (int)$user['id'];
             $_SESSION['tenant_id'] = (int)$tenant['id'];
             $_SESSION['tenant_subdomain'] = $tenant['subdomain'];
@@ -45,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <h1><?= h(APP_NAME) ?></h1>
 <p class="small">Demo tenant: <strong>demo</strong> · email <strong>owner@demo.local</strong> · password <strong>secret123</strong></p>
 <?php if ($error): ?><p class="badge danger"><?= h($error) ?></p><?php endif; ?>
-<form method="post">
+<form method="post"><?= csrf_input() ?>
 <label class="small">Store / Tenant</label><input name="store" value="<?= h($tenant['subdomain'] ?? getv('store', 'demo')) ?>" required>
 <label class="small">Email</label><input type="email" name="email" required>
 <label class="small">Password</label><input type="password" name="password" required>

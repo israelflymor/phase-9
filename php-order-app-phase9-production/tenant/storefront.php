@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/tenant.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/events.php';
 session_start();
 
@@ -14,6 +15,7 @@ $stmt->execute([$tenantId]);
 $items = $stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_csrf();
     if (!enforce_plan_limit($pdo, $tenantId, 'orders')) {
         $error = 'Plan order limit reached.';
     } else {
@@ -44,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="topbar"><div><h1><?= h($tenant['name']) ?></h1><div class="small">Store: <?= h($tenant['subdomain']) ?> · Plan: <?= h($tenant['plan_code']) ?></div></div><div class="nav"><a href="/login.php?store=<?= urlencode($tenant['subdomain']) ?>">Admin login</a></div></div>
 <?php if ($msg): ?><div class="card"><span class="badge ok"><?= h($msg) ?></span></div><?php endif; ?>
 <?php if ($error): ?><div class="card"><span class="badge danger"><?= h($error) ?></span></div><?php endif; ?>
-<div class="card"><h2>Place order</h2><form method="post">
+<div class="card"><h2>Place order</h2><form method="post"><?= csrf_input() ?>
 <div class="grid"><div><label class="small">Your Name</label><input name="client_name" required></div><div><label class="small">Your Email</label><input type="email" name="client_email"></div></div>
 <div class="row" style="margin-top:12px;margin-bottom:12px">
 <label><input type="radio" name="payment_method" value="pay_on_delivery" checked> Pay on Delivery</label>

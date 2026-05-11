@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/tenant.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/events.php';
 
 require_admin();
@@ -10,6 +11,7 @@ $tenant = require_tenant($pdo);
 require_same_tenant_or_die($tenant['id']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'], $_POST['new_status'])) {
+    require_csrf();
     $stmt = $pdo->prepare('UPDATE orders SET status = ? WHERE id = ? AND tenant_id = ?');
     $stmt->execute([post('new_status'), (int)post('order_id'), (int)$tenant['id']]);
     emit_event($pdo, (int)$tenant['id'], 'order.status_changed', ['order_id'=>(int)post('order_id'),'status'=>post('new_status')]);
@@ -31,6 +33,6 @@ $orders = $stmt->fetchAll();
 <td><?php $list = json_decode($order['items'], true) ?: []; foreach ($list as $line): ?><div class="small"><?= h($line['name']) ?> × <?= (int)$line['qty'] ?></div><?php endforeach; ?></td>
 <td><div><?= h($order['payment_method']) ?></div><div class="small"><?= h($order['payment_status']) ?></div></td>
 <td><span class="badge"><?= h($order['status']) ?></span></td>
-<td><form method="post" class="row"><input type="hidden" name="order_id" value="<?= (int)$order['id'] ?>"><select name="new_status" style="min-width:140px"><?php foreach (['pending','packing','shipped','delivered','cancelled'] as $status): ?><option value="<?= h($status) ?>" <?= $order['status'] === $status ? 'selected' : '' ?>><?= h($status) ?></option><?php endforeach; ?></select><button type="submit">Update</button></form></td>
+<td><form method="post" class="row"><?= csrf_input() ?><input type="hidden" name="order_id" value="<?= (int)$order['id'] ?>"><select name="new_status" style="min-width:140px"><?php foreach (['pending','packing','shipped','delivered','cancelled'] as $status): ?><option value="<?= h($status) ?>" <?= $order['status'] === $status ? 'selected' : '' ?>><?= h($status) ?></option><?php endforeach; ?></select><button type="submit">Update</button></form></td>
 </tr><?php endforeach; ?>
 </tbody></table></div></div></body></html>
