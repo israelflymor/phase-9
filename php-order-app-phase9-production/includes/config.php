@@ -4,10 +4,16 @@ ini_set('display_errors', 0);
 ini_set('session.cookie_httponly', 1);
 ini_set('session.use_only_cookies', 1);
 ini_set('session.use_strict_mode', 1);
+ini_set('session.cookie_samesite', 'Lax');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
 
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'dbname');
 define('DB_USER', 'dbuser');
 define('DB_PASS', 'dbpass');
 define('APP_NAME', 'Phase 9 Commerce SaaS');
+define('STRIPE_WEBHOOK_SECRET', '');
+define('PAYSTACK_WEBHOOK_SECRET', '');
 ?>

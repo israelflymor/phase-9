@@ -40,4 +40,37 @@ function normalize_store_code($value) {
     $clean = preg_replace('/[^a-z0-9\-]/', '', $clean);
     return trim($clean, '-');
 }
+
+function is_valid_store_code($value) {
+    return (bool)preg_match('/^[a-z0-9](?:[a-z0-9\-]{1,61}[a-z0-9])?$/', (string)$value);
+}
+
+function enforce_rate_limit_or_die($bucket, $maxRequests, $windowSeconds) {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $key = preg_replace('/[^a-zA-Z0-9_:\-.]/', '', $bucket . ':' . $ip);
+    $dir = sys_get_temp_dir() . '/phase9_rate_limit';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+    $file = $dir . '/' . sha1($key) . '.json';
+    $now = time();
+    $state = ['start' => $now, 'count' => 0];
+    if (is_file($file)) {
+        $decoded = json_decode((string)@file_get_contents($file), true);
+        if (is_array($decoded) && isset($decoded['start'], $decoded['count'])) {
+            $state = $decoded;
+        }
+    }
+    if (($now - (int)$state['start']) >= $windowSeconds) {
+        $state = ['start' => $now, 'count' => 0];
+    }
+    $state['count'] = (int)$state['count'] + 1;
+    @file_put_contents($file, json_encode($state), LOCK_EX);
+
+    if ((int)$state['count'] > $maxRequests) {
+        $retryAfter = max(1, $windowSeconds - ($now - (int)$state['start']));
+        header('Retry-After: ' . $retryAfter);
+        json_response(['error' => 'Too many requests'], 429);
+    }
+}
 ?>

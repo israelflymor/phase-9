@@ -9,6 +9,7 @@ $success = '';
 $allowedPlans = ['free', 'starter'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    enforce_rate_limit_or_die('onboard', 5, 600);
     verify_csrf_or_die();
 
     $name = post('name');

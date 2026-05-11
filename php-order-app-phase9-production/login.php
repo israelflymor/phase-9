@@ -8,16 +8,19 @@ $error = '';
 $tenant = resolve_tenant($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    enforce_rate_limit_or_die('login', 10, 300);
     verify_csrf_or_die();
-    $store = post('store');
-    $email = post('email');
+    $store = normalize_store_code(post('store'));
+    $email = strtolower(post('email'));
     $password = post('password');
 
     $stmt = $pdo->prepare('SELECT * FROM tenants WHERE subdomain = ? LIMIT 1');
     $stmt->execute([$store]);
     $tenant = $stmt->fetch();
 
-    if (!$tenant || $tenant['status'] !== 'active') {
+    if (!is_valid_store_code($store) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Invalid login input.';
+    } elseif (!$tenant || $tenant['status'] !== 'active') {
         $error = 'Invalid or inactive store.';
     } else {
         $stmt = $pdo->prepare('SELECT * FROM users WHERE tenant_id = ? AND email = ? AND status = "active" LIMIT 1');
