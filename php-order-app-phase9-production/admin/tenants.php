@@ -10,8 +10,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create_tenant') {
         $pdo->beginTransaction();
         try {
+            $subdomain = normalize_store_code(post('subdomain'));
+            if (!is_valid_store_code($subdomain)) {
+                throw new Exception('Invalid store code');
+            }
             $stmt = $pdo->prepare('INSERT INTO tenants (name, subdomain, plan_code, status) VALUES (?, ?, ?, "active")');
-            $stmt->execute([post('name'), post('subdomain'), post('plan_code', 'free')]);
+            $stmt->execute([post('name'), $subdomain, post('plan_code', 'free')]);
             $tenantId = (int)$pdo->lastInsertId();
 
             $stmt = $pdo->prepare('SELECT id FROM plans WHERE code = ? LIMIT 1');
